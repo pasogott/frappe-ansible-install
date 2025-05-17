@@ -1,0 +1,3 @@
+---
+mariadb_login_user: "root"
+mariadb_login_password: "mypassword"

@@ -1,0 +1,6 @@
+---
+
+- name: Install frappe-bench
+  ansible.builtin.pip:
+    name: frappe-bench
+    break_system_packages: true
