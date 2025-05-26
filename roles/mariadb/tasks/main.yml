@@ -1,0 +1,115 @@
+---
+
+- name: Ensure required packages are installed
+  ansible.builtin.apt:
+    name:
+      - mariadb-server
+      - mariadb-client
+      - python3-pymysql
+      - libmariadb-dev
+    state: present
+
+# ------- Begin mariadb-secure-installation -------
+- name: Set root password
+  community.mysql.mysql_user:
+    name: "{{ mariadb_login_user }}"
+    password: "{{ mariadb_login_password }}"
+    login_user: "{{ mariadb_login_user }}"
+    login_password: "{{ mariadb_login_password }}"
+    host: localhost
+    login_unix_socket: /run/mysqld/mysqld.sock
+  become: true
+  no_log: true
+  notify:
+    - Restart MariaDB
+
+- name: Deletes anonymous MySQL server user for ansible_fqdn
+  community.mysql.mysql_user:
+    name: ""
+    login_user: "{{ mariadb_login_user }}"
+    login_password: "{{ mariadb_login_password }}"
+    host: "{{ ansible_fqdn }}"
+    state: absent
+    login_unix_socket: /run/mysqld/mysqld.sock
+  notify:
+    - Restart MariaDB
+
+- name: Deletes anonymous MySQL server user for localhost
+  community.mysql.mysql_user:
+    name: ""
+    login_user: "{{ mariadb_login_user }}"
+    login_password: "{{ mariadb_login_password }}"
+    state: absent
+    login_unix_socket: /run/mysqld/mysqld.sock
+  notify:
+    - Restart MariaDB
+
+- name: Secures the MySQL root user for IPV6 localhost (::1)
+  community.mysql.mysql_user:
+    name: "{{ mariadb_login_user }}"
+    login_user: "{{ mariadb_login_user }}"
+    login_password: "{{ mariadb_login_password }}"
+    host: "::1"
+    login_unix_socket: /run/mysqld/mysqld.sock
+  no_log: true
+  notify:
+    - Restart MariaDB
+
+- name: Secures the MySQL root user for IPV4 localhost (127.0.0.1)
+  community.mysql.mysql_user:
+    name: "{{ mariadb_login_user }}"
+    login_user: "{{ mariadb_login_user }}"
+    login_password: "{{ mariadb_login_password }}"
+    host: "127.0.0.1"
+    login_unix_socket: /run/mysqld/mysqld.sock
+  no_log: true
+  notify:
+    - Restart MariaDB
+
+- name: Secures the MySQL root user for localhost domain (localhost)
+  community.mysql.mysql_user:
+    name: "{{ mariadb_login_user }}"
+    login_user: "{{ mariadb_login_user }}"
+    login_password: "{{ mariadb_login_password }}"
+    host: "localhost"
+    login_unix_socket: /run/mysqld/mysqld.sock
+  no_log: true
+  notify:
+    - Restart MariaDB
+
+- name: Secures the MySQL root user for hostname {{ ansible_fqdn }}
+  community.mysql.mysql_user:
+    name: "{{ mariadb_login_user }}"
+    login_user: "{{ mariadb_login_user }}"
+    login_password: "{{ mariadb_login_password }}"
+    host: "{{ ansible_fqdn }}"
+    login_unix_socket: /run/mysqld/mysqld.sock
+  no_log: true
+  notify:
+    - Restart MariaDB
+
+- name: Removes the MySQL test database
+  community.mysql.mysql_db:
+    db: test
+    login_user: "{{ mariadb_login_user }}"
+    login_password: "{{ mariadb_login_password }}"
+    state: absent
+    login_unix_socket: /run/mysqld/mysqld.sock
+  notify:
+    - Restart MariaDB
+# ------- END mariadb-secure-installation -------
+
+- name: Configure MariaDB settings
+  ansible.builtin.blockinfile:
+    path: /etc/mysql/my.cnf
+    marker: '# {mark} ANSIBLE MANAGED BLOCK for MariaDB settings'
+    block: |
+      [mysqld]
+      character-set-client-handshake = FALSE
+      character-set-server = utf8mb4
+      collation-server = utf8mb4_unicode_ci
+
+      [mysql]
+      default-character-set = utf8mb4
+  notify:
+    - Restart MariaDB

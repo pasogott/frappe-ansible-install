@@ -1,0 +1,4 @@
+---
+node_nvm_version: v0.40.3
+node_nvm_script: /tmp/node_install.sh
+node_version: 18
