@@ -1,0 +1,13 @@
+---
+mariadb_login_user: "root"
+mariadb_login_password: "mypassword"
+
+node_nvm_version: v0.40.3
+node_nvm_script: /tmp/node_install.sh
+node_version: 18
+
+erpnext_frappe_user: frappe
+erpnext_site_name: ubuntu
+erpnext_hrms: true
+erpnext_admin_password: Wiogh9xe4dee
+erpnext_domain: <PRODUCTION_DOMAIN>

@@ -1,0 +1,6 @@
+---
+erpnext_frappe_user: frappe
+erpnext_site_name: ubuntu
+erpnext_hrms: true
+erpnext_admin_password: myadminpassword
+erpnext_domain: yourdomain.com

@@ -1,47 +1,47 @@
 ---
 - name: Download nvm install script to control node
   ansible.builtin.get_url:
-    url: https://raw.githubusercontent.com/nvm-sh/nvm/{{ node_nvm_version }}/install.sh
-    dest: "{{ node_nvm_script }}"
-    mode: '0744'
+      url: https://raw.githubusercontent.com/nvm-sh/nvm/{{ node_nvm_version }}/install.sh
+      dest: "{{ node_nvm_script }}"
+      mode: "0744"
   delegate_to: 127.0.0.1
+  become: false
 
 - name: Execute nvm install script on deployment node and install node
   ansible.builtin.script: "{{ node_nvm_script }}"
   args:
-    executable: /bin/bash
+      executable: /bin/bash
 
 - name: Install Node v{{ node_version }}
   ansible.builtin.shell: source /root/.nvm/nvm.sh && nvm install {{ node_version }}
   args:
-    executable: /bin/bash
+      executable: /bin/bash
   register: nvm_install
   changed_when: nvm_install.rc == 0
   failed_when: nvm_install.rc != 0
 
 - name: Setup /root/.profile to ensure Node is in PATH
   ansible.builtin.lineinfile:
-    path: /root/.profile
-    line: source /root/.nvm/nvm.sh
-    create: true
-    mode: '0644'
+      path: /root/.profile
+      line: source /root/.nvm/nvm.sh
+      create: true
+      mode: "0644"
 
 - name: Check node version
   ansible.builtin.shell: source /root/.profile && node -v
   register: node_version
   changed_when: node_version.rc == 0
   args:
-    executable: /bin/bash
+      executable: /bin/bash
 
-- name: Create symbolic link so node is in path
-  ansible.builtin.file:
-    src: /root/.nvm/versions/node/{{ node_version.stdout }}/bin/node
-    path: /usr/bin/node
-    state: link
+- name: Install npm
+  ansible.builtin.apt:
+      name: npm
+      state: present
 
 - name: Install yarn
   community.general.npm:
-    name: yarn
-    global: true
-    state: present
-    executable: /root/.nvm/versions/node/{{ node_version.stdout }}/bin/npm
+      name: yarn
+      global: true
+      state: present
+      # executable: /root/.nvm/versions/node/{{ node_version.stdout }}/bin/npm

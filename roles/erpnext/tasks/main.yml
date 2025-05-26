@@ -1,0 +1,251 @@
+---
+- name: Update Redis Port for hrms
+  ansible.builtin.lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: '^port '
+    line: 'port 13000'
+  when: erpnext_hrms
+
+- name: Restart redis-server
+  ansible.builtin.systemd_service:
+    name: redis-server
+    state: restarted
+    enabled: true
+  when: erpnext_hrms
+
+- name: Create user
+  ansible.builtin.user:
+    name: "{{ erpnext_frappe_user }}"
+    groups:
+      - sudo
+    append: true
+    state: present
+    shell: /bin/bash
+    create_home: true
+
+- name: Initialize Frappe Bench
+  ansible.builtin.shell:
+    cmd: bench init --frappe-branch version-15 frappe-bench
+  register: bench
+  changed_when: bench.rc == 0
+  args:
+    executable: /bin/bash
+    chdir: /home/{{ erpnext_frappe_user }}/
+  become_user: "{{ erpnext_frappe_user }}"
+  become: true
+
+- name: Change user directory permissions
+  ansible.builtin.file:
+    path: /home/{{ erpnext_frappe_user }}/
+    mode: o+rx
+    recurse: true
+
+- name: Create a New Site
+  ansible.builtin.expect:
+    command: bench new-site {{ erpnext_site_name }}
+    responses:
+      "MySQL root password:":
+        - "{{ mariadb_login_password }}"
+      "Set Administrator password:":
+        - "{{ erpnext_admin_password }}"
+      "Re-enter Administrator password:":
+        - "{{ erpnext_admin_password }}"
+    timeout: 120
+  register: bench
+  # changed_when: bench.rc == 0
+  failed_when: 'bench.rc == 1 and "already exists" not in bench.stdout'
+  args:
+    chdir: /home/{{ erpnext_frappe_user }}/frappe-bench
+  become_user: "{{ erpnext_frappe_user }}"
+  become: true
+  no_log: true
+
+- name: Download the erpnext app to our server
+  ansible.builtin.expect:
+    command: bench get-app --branch version-15 erpnext
+    responses:
+      '(?i)\[y\/N\]:':
+        - "y"
+    timeout: 120
+  register: bench
+  changed_when: bench.rc == 0
+  args:
+    chdir: /home/{{ erpnext_frappe_user }}/frappe-bench
+  become_user: "{{ erpnext_frappe_user }}"
+  become: true
+
+- name: Download the payments app to our server
+  ansible.builtin.expect:
+    command: bench get-app payments
+    responses:
+      '(?i)\[y\/N\]:':
+        - "y"
+    timeout: 120
+  register: bench
+  changed_when: bench.rc == 0
+  args:
+    chdir: /home/{{ erpnext_frappe_user }}/frappe-bench
+  become_user: "{{ erpnext_frappe_user }}"
+  become: true
+
+- name: Download the hrms app to our server
+  ansible.builtin.expect:
+    command: bench get-app hrms
+    responses:
+      '(?i)\[y\/N\]:':
+        - "y"
+    timeout: 120
+  register: bench
+  changed_when: bench.rc == 0
+  args:
+    chdir: /home/{{ erpnext_frappe_user }}/frappe-bench
+  become_user: "{{ erpnext_frappe_user }}"
+  become: true
+  when: erpnext_hrms
+
+- name: Install App erpnext
+  ansible.builtin.shell:
+    cmd: bench --site {{ erpnext_site_name }} install-app erpnext
+  register: bench
+  changed_when: bench.rc == 0
+  args:
+    executable: /bin/bash
+    chdir: /home/{{ erpnext_frappe_user }}/frappe-bench
+  become_user: "{{ erpnext_frappe_user }}"
+  become: true
+
+- name: Install App hrms
+  ansible.builtin.shell:
+    cmd: bench --site {{ erpnext_site_name }} install-app hrms
+  register: bench
+  changed_when: bench.rc == 0
+  args:
+    executable: /bin/bash
+    chdir: /home/{{ erpnext_frappe_user }}/frappe-bench
+  become_user: "{{ erpnext_frappe_user }}"
+  become: true
+  when: erpnext_hrms
+
+- name: Enable scheduler service
+  ansible.builtin.shell:
+    cmd: bench --site {{ erpnext_site_name }} enable-scheduler
+  register: bench
+  changed_when: bench.rc == 0
+  args:
+    executable: /bin/bash
+    chdir: /home/{{ erpnext_frappe_user }}/frappe-bench
+  become_user: "{{ erpnext_frappe_user }}"
+  become: true
+
+- name: Disable maintenance mode
+  ansible.builtin.shell:
+    cmd: bench --site {{ erpnext_site_name }} set-maintenance-mode off
+  register: bench
+  changed_when: bench.rc == 0
+  args:
+    executable: /bin/bash
+    chdir: /home/{{ erpnext_frappe_user }}/frappe-bench
+  become_user: "{{ erpnext_frappe_user }}"
+  become: true
+
+- name: Remove externally managed python error
+  ansible.builtin.file:
+    path: /usr/lib/python3.12/EXTERNALLY-MANAGED
+    state: absent
+
+- name: Setup production config
+  ansible.builtin.expect:
+    command: sudo bench setup production {{ erpnext_frappe_user }}
+    responses:
+      '(?i)\[y\/N\]:': "y"
+    timeout: 240
+  register: bench
+  changed_when: bench.rc == 0
+  args:
+    chdir: /home/{{ erpnext_frappe_user }}/frappe-bench
+  become_user: "{{ erpnext_frappe_user }}"
+  become: true
+
+- name: Allow Ports in ufw firewall
+  community.general.ufw:
+    state: enabled
+    to_port: "{{ item | string }}"
+    comment: Made by Ansible for ERPNext
+  loop:
+    - 22
+    - 25
+    - 143
+    - 80
+    - 443
+    - 3306
+    - 3022
+    - 8000/tcp
+
+- name: Enable DNS multitenant
+  ansible.builtin.shell:
+    cmd: bench config dns_multitenant on
+  register: bench
+  changed_when: bench.rc == 0
+  args:
+    executable: /bin/bash
+    chdir: /home/{{ erpnext_frappe_user }}/frappe-bench
+  become_user: "{{ erpnext_frappe_user }}"
+  become: true
+
+- name: Add Domain to site
+  ansible.builtin.shell:
+    cmd: bench setup add-domain {{ erpnext_domain }} --site {{ erpnext_site_name }}
+  register: bench
+  changed_when: bench.rc == 0
+  args:
+    executable: /bin/bash
+    chdir: /home/{{ erpnext_frappe_user }}/frappe-bench
+  become_user: "{{ erpnext_frappe_user }}"
+  become: true
+
+- name: Setup nginx again
+  ansible.builtin.expect:
+    command: bench setup nginx
+    responses:
+      '(?i)\[y\/N\]:': "y"
+    timeout: 120
+  register: bench
+  changed_when: bench.rc == 0
+  args:
+    chdir: /home/{{ erpnext_frappe_user }}/frappe-bench
+  become_user: "{{ erpnext_frappe_user }}"
+  become: true
+
+- name: Reload nginx
+  ansible.builtin.systemd_service:
+    name: nginx
+    state: reloaded
+
+- name: Install core
+  community.general.snap:
+    name: core
+    state: present
+
+- name: Install certbot
+  community.general.snap:
+    name: certbot
+    state: present
+    classic: true
+
+- name: Agree to TOS for certbot
+  ansible.builtin.command:
+    cmd: sudo certbot -n register --agree-tos
+  register: certbot
+  changed_when: 'certbot.rc == 0 or certbot.rc == 1 and "There is an existing account" in certbot.stderr'
+  failed_when: 'certbot.rc == 1 and "There is an existing account" not in certbot.stderr'
+
+- name: Use certbot to configure erpnext instance
+  ansible.builtin.command:
+    cmd: sudo certbot -n --nginx -d {{ erpnext_domain }} --cert-name {{ erpnext_domain }}
+  register: certbot
+  changed_when: certbot.rc == 0
+
+- name: Reload nginx
+  ansible.builtin.systemd_service:
+    name: nginx
+    state: reloaded
